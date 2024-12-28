@@ -4,7 +4,7 @@ from app.db.base_class import Base
 
 
 class Cluster(Base):
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String, index=True)
     organization_id = Column(Integer, ForeignKey("organization.id"))
 

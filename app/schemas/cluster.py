@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from typing import Optional
 
 
 class ClusterBase(BaseModel):
@@ -18,7 +17,6 @@ class ClusterUpdate(ClusterBase):
 
 
 class Cluster(ClusterBase):
-    id: int
     organization_id: int
     cpu_available: float
     ram_available: float

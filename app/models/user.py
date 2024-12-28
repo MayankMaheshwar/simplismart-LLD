@@ -1,13 +1,15 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Boolean, Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
 
 
-class Organization(Base):
+class User(Base):
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    invite_code = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    is_active = Column(Boolean, default=True)
+    organization_id = Column(Integer, ForeignKey("organization.id"))
 
     # Relationships
-    users = relationship("User", back_populates="organization")
-    clusters = relationship("Cluster", back_populates="organization")
+    organization = relationship("Organization", back_populates="users")

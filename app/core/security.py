@@ -5,17 +5,26 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    TODO: Implement password verification using bcrypt
-    Example:
-    return pwd_context.verify(plain_password, hashed_password)
+    Verifies the provided plain password against the given hashed password.
+
+    Args:
+        plain_password: The plain-text password to be verified.
+        hashed_password: The previously hashed password to compare against.
+
+    Returns:
+        True if the plain password matches the hashed password, False otherwise.
     """
-    pass
+    return pwd_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
     """
-    TODO: Implement password hashing using bcrypt
-    Example:
-    return pwd_context.hash(password)
+    Hashes the given password using the bcrypt algorithm.
+
+    Args:
+        password: The plain-text password to be hashed.
+
+    Returns:
+        The hashed password as a string.
     """
-    pass
+    return pwd_context.hash(password)

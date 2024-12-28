@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     # Database configuration
     POSTGRES_SERVER: str = os.getenv("PGHOST", "localhost")
     POSTGRES_USER: str = os.getenv("PGUSER", "postgres")
-    POSTGRES_PASSWORD: str = os.getenv("PGPASSWORD", "")
+    POSTGRES_PASSWORD: str = os.getenv("PGPASSWORD", "simplismart")
     POSTGRES_DB: str = os.getenv("PGDATABASE", "cluster_management")
     POSTGRES_PORT: str = os.getenv("PGPORT", "5432")
 
