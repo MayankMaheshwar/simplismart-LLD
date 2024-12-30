@@ -38,7 +38,6 @@ def create_organization(
         db, organization_in, invite_code=invite_code
     )
 
-    # Associate the current user with the newly created organization
     current_user.organization = organization
     db.add(current_user)
     db.commit()
@@ -73,7 +72,6 @@ def join_organization(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid invite code"
         )
 
-    # Associate the current user with the joined organization
     current_user.organization = organization
     db.add(current_user)
     db.commit()

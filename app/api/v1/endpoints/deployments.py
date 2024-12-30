@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+import redis
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List
@@ -7,101 +8,12 @@ from app.schemas.deployment import Deployment, DeploymentCreate
 from app.models.deployment import Deployment as DeploymentModel, DeploymentStatus
 from app.models.user import User
 from app.models.cluster import Cluster
-from sqlalchemy import and_
 
 
 router = APIRouter()
-
-
-def schedule_deployment(
-    db: Session, deployment_in: DeploymentCreate
-) -> DeploymentModel:
-    """
-    Schedules a deployment by checking resource availability and preempting lower-priority deployments if needed.
-    """
-
-    # Query the target cluster
-    cluster = db.query(Cluster).filter(Cluster.id == deployment_in.cluster_id).first()
-    if not cluster:
-        raise HTTPException(status_code=404, detail="Cluster not found")
-
-    # Check if there are sufficient resources in the cluster
-    if (
-        cluster.cpu_available < deployment_in.cpu_required
-        or cluster.ram_available < deployment_in.ram_required
-        or cluster.gpu_available < deployment_in.gpu_required
-    ):
-        # Fetch lower-priority running deployments for preemption
-        lower_priority_deployments = (
-            db.query(DeploymentModel)
-            .filter(
-                and_(
-                    DeploymentModel.cluster_id == cluster.id,
-                    DeploymentModel.priority < deployment_in.priority,
-                    DeploymentModel.status == DeploymentStatus.RUNNING,
-                )
-            )
-            .order_by(
-                DeploymentModel.priority.asc()
-            )  # Ascending priority (lower values first)
-            .all()
-        )
-
-        # Attempt to free resources by preempting lower-priority deployments
-        for dep in lower_priority_deployments:
-            # Free resources from the lower-priority deployment
-            cluster.cpu_available += dep.cpu_required
-            cluster.ram_available += dep.ram_required
-            cluster.gpu_available += dep.gpu_required
-
-            # Mark the lower-priority deployment as FAILED
-            dep.status = DeploymentStatus.FAILED
-            db.add(dep)
-
-            # Check if the freed resources are now sufficient
-            if (
-                cluster.cpu_available >= deployment_in.cpu_required
-                and cluster.ram_available >= deployment_in.ram_required
-                and cluster.gpu_available >= deployment_in.gpu_required
-            ):
-                break
-        else:
-            # If no sufficient resources can be freed, return an error
-            raise HTTPException(
-                status_code=400, detail="Insufficient resources even after preemption"
-            )
-
-    # Allocate resources for the new deployment
-    cluster.cpu_available -= deployment_in.cpu_required
-    cluster.ram_available -= deployment_in.ram_required
-    cluster.gpu_available -= deployment_in.gpu_required
-
-    # Retrieve the deployment instance created in `create_deployment`
-    deployment = (
-        db.query(DeploymentModel)
-        .filter(
-            DeploymentModel.name == deployment_in.name,
-            DeploymentModel.cluster_id == deployment_in.cluster_id,
-            DeploymentModel.status == DeploymentStatus.PENDING,
-        )
-        .first()
-    )
-
-    if not deployment:
-        raise HTTPException(
-            status_code=400, detail="Pending deployment record not found"
-        )
-
-    # Update the deployment status to RUNNING
-    deployment.status = DeploymentStatus.RUNNING
-    db.add(deployment)
-
-    # Save the changes to the database
-    db.add(cluster)
-    db.commit()
-    db.refresh(deployment)
-
-    return deployment
+redis_client = redis.StrictRedis(
+    host="localhost", port=6379, db=0, decode_responses=True
+)
 
 
 @router.post("/", response_model=Deployment)
@@ -114,12 +26,25 @@ def create_deployment(
     """
     Create a new deployment and schedule it.
     """
-    # Check if the user has access to the cluster
     cluster = db.query(Cluster).filter(Cluster.id == deployment_in.cluster_id).first()
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster not found")
 
-    # Create deployment instance
+    if cluster.organization_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=403,
+            detail="User does not have access to this organization's cluster",
+        )
+
+    if (
+        cluster.cpu_available < deployment_in.cpu_required
+        or cluster.ram_available < deployment_in.ram_required
+        or cluster.gpu_available < deployment_in.gpu_required
+    ):
+        raise HTTPException(
+            status_code=400, detail="Insufficient resources to create deployment"
+        )
+
     deployment = DeploymentModel(
         **deployment_in.dict(), status=DeploymentStatus.PENDING
     )
@@ -131,8 +56,21 @@ def create_deployment(
         db.rollback()
         raise HTTPException(status_code=400, detail="Deployment creation failed")
 
-    # Schedule the deployment
-    schedule_deployment(db=db, deployment_in=deployment_in)
+    redis_key = f"org:{current_user.organization_id}:deployments"
+    redis_data = {
+        "id": deployment.id,
+        "cluster_id": deployment_in.cluster_id,
+        "cpu_required": deployment_in.cpu_required,
+        "ram_required": deployment_in.ram_required,
+        "gpu_required": deployment_in.gpu_required,
+        "status": deployment.status,
+        "created_at": str(deployment.created_at),
+    }
+
+    redis_client.rpush(redis_key, str(deployment.id))
+
+    redis_client.hmset(f"deployment:{deployment.id}", redis_data)
+
     db.add(deployment)
     db.commit()
     db.refresh(deployment)
@@ -148,5 +86,37 @@ def list_deployments(
     """
     List all deployments for the user's organization.
     """
-    deployments = db.query(DeploymentModel).all()
+    redis_key = f"org:{current_user.organization_id}:deployments"
+
+    deployment_ids = redis_client.lrange(redis_key, 0, -1)
+
+    if deployment_ids:
+        deployments = []
+        for deployment_id in deployment_ids:
+            deployment_data = redis_client.hgetall(f"deployment:{deployment_id}")
+            if deployment_data:
+                deployments.append(Deployment(**deployment_data))
+        return deployments
+
+    deployments = (
+        db.query(DeploymentModel)
+        .filter(DeploymentModel.organization_id == current_user.organization_id)
+        .all()
+    )
+
+    for deployment in deployments:
+        redis_client.rpush(redis_key, str(deployment.id))
+        redis_client.hmset(
+            f"deployment:{deployment.id}",
+            {
+                "id": deployment.id,
+                "cluster_id": deployment.cluster_id,
+                "cpu_required": deployment.cpu_required,
+                "ram_required": deployment.ram_required,
+                "gpu_required": deployment.gpu_required,
+                "status": deployment.status,
+                "created_at": str(deployment.created_at),
+            },
+        )
+
     return deployments

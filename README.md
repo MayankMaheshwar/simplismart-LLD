@@ -1,21 +1,24 @@
-# Backend Engineering Assignment:
-
-## Hypervisor-like Service for MLOps Platform
-
-To run the project -
-
-1) Pull the docker images of redis and postgres images and manually set the credentials 
-
-docker pull redis:latest
-
-docker pull postgres:latest
+# Hypervisor-like Service for MLOps Platform
 
 
-2) Install the libraries from requirements.txt by
+## Installation
 
+Use the package manager [pip](https://pip.pypa.io/en/stable/) to install dependencies.
+
+```bash
 pip install -r requirements.txt
+```
 
+## Docker images needed
 
-3) Start the service
+```bash
+docker pull redis
 
+docker pull postgres
+```
+
+## Start the service
+
+```bash
 python3 main.py
+```
