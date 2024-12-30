@@ -22,8 +22,6 @@ def create_cluster(
     """
     Create a new cluster for the current user's organization.
     """
-    print(current_user.__dict__, "arun")
-    # Assuming the user has an organization_id attribute
     if not hasattr(current_user, "organization_id"):
         raise HTTPException(
             status_code=400, detail="User does not belong to any organization"
@@ -37,7 +35,6 @@ def create_cluster(
             "gpu_available": cluster_in.gpu_limit,
         }
     )
-    print(updated_cluster_in.__dict__, "arun3")
 
     return crud_create_cluster(db=db, cluster=updated_cluster_in)
 

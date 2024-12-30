@@ -5,7 +5,10 @@ from sqlalchemy import create_engine
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import engine, SessionLocal
+from fastapi_utils.tasks import repeat_every
+from app.core.redis import update_deployment_status
+
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -86,6 +89,21 @@ app.add_middleware(
     session_cookie=settings.SESSION_COOKIE_NAME,
     max_age=settings.SESSION_MAX_AGE,
 )
+
+
+from fastapi import FastAPI
+from fastapi_utils.tasks import repeat_every
+
+
+@app.on_event("startup")
+@repeat_every(seconds=60)
+def sync_deployment_status_with_db() -> None:
+    """
+    Sync deployment statuses from Redis to the database every 60 seconds.
+    """
+    with SessionLocal() as db:
+        update_deployment_status(db)
+
 
 # Include API router
 app.include_router(api_router, prefix="/api/v1")

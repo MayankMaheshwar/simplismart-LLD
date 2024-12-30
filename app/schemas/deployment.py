@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from datetime import datetime
+from pydantic import BaseModel, Field
 from typing import Optional
 from app.models.deployment import DeploymentStatus
 
@@ -14,6 +15,7 @@ class DeploymentBase(BaseModel):
 
 class DeploymentCreate(DeploymentBase):
     cluster_id: int
+    required_time: int
 
 
 class DeploymentUpdate(DeploymentBase):
@@ -21,7 +23,6 @@ class DeploymentUpdate(DeploymentBase):
 
 
 class Deployment(DeploymentBase):
-    id: int
     cluster_id: int
     status: DeploymentStatus
 
